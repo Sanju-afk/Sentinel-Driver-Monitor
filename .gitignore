@@ -1,0 +1,34 @@
+# --- Build Systems ---
+build/
+edge_device/build/
+cmake-build-debug/
+CMakeFiles/
+CMakeCache.txt
+*.cmake
+Makefile
+
+# --- Executables & Binaries ---
+*.a
+*.o
+*.so
+*.dylib
+bin/
+Sentinel
+
+# --- Data & Large Files ---
+*.mp4
+*.avi
+*.jpg
+*.png
+data/
+
+# --- IDE Settings (Optional) ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# --- Tensorflow/Dependencies (Just in case) ---
+tf_build/
+tensorflow/
+third_party/
