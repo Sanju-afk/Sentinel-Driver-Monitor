@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sentinel — Driver Safety Dashboard</title>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #30363d;
+    --accent:   #238636;
+    --danger:   #da3633;
+    --warn:     #d29922;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --radius:   8px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  header .logo { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.5px; }
+  header .logo span { color: var(--danger); }
+  .live-badge {
+    margin-left: auto;
+    background: var(--danger);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 1px;
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  /* ── Stats bar ── */
+  .stats {
+    display: flex;
+    gap: 16px;
+    padding: 20px 28px;
+    flex-wrap: wrap;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 24px;
+    min-width: 160px;
+    flex: 1;
+  }
+  .stat-card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .stat-card .value { font-size: 2rem; font-weight: 700; margin-top: 4px; }
+  .stat-card.danger  .value { color: var(--danger); }
+  .stat-card.warn    .value { color: var(--warn);   }
+  .stat-card.ok      .value { color: var(--accent);  }
+
+  /* ── Grid ── */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    padding: 0 28px 28px;
+  }
+
+  /* ── Incident card ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: transform .15s, box-shadow .15s;
+    cursor: pointer;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px #0006; }
+  .card.crash      { border-color: var(--danger); }
+  .card.drowsiness { border-color: var(--warn); }
+  .card img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    display: block;
+  }
+  .card-body { padding: 12px 14px; }
+  .card-type {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+  }
+  .card.crash      .card-type { background: var(--danger); color: #fff; }
+  .card.drowsiness .card-type { background: var(--warn);   color: #000; }
+  .card-time { font-size: 0.78rem; color: var(--muted); }
+  .card-meta { font-size: 0.78rem; color: var(--muted); margin-top: 4px; word-break: break-all; }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: #000c;
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    max-width: 700px;
+    width: 90%;
+    overflow: hidden;
+  }
+  .modal img { width: 100%; display: block; max-height: 55vh; object-fit: contain; background:#000; }
+  .modal-info { padding: 16px 20px; }
+  .modal-info h3 { margin-bottom: 6px; font-size: 1.1rem; }
+  .modal-info p  { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+  .modal-close {
+    float: right;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 1.4rem;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .modal-close:hover { color: var(--text); }
+
+  /* ── Empty state ── */
+  .empty {
+    grid-column: 1/-1;
+    text-align: center;
+    padding: 60px;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  .empty svg { display: block; margin: 0 auto 16px; opacity: .3; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🛡 <span>Sentinel</span> Driver Safety</div>
+  <div class="live-badge" id="liveStatus">● LIVE</div>
+</header>
+
+<section class="stats">
+  <div class="stat-card ok">
+    <div class="label">Total Incidents</div>
+    <div class="value" id="statTotal">—</div>
+  </div>
+  <div class="stat-card warn">
+    <div class="label">Drowsiness Alerts</div>
+    <div class="value" id="statDrowsy">—</div>
+  </div>
+  <div class="stat-card danger">
+    <div class="label">Crash SOS Events</div>
+    <div class="value" id="statCrash">—</div>
+  </div>
+</section>
+
+<main class="grid" id="grid">
+  <div class="empty">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M15 10l-4 4m0 0l-4-4m4 4V3M4 17v1a2 2 0 002 2h12a2 2 0 002-2v-1"/>
+    </svg>
+    Waiting for incidents from the edge device…
+  </div>
+</main>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <img id="modalImg" src="" alt="Incident frame"/>
+    <div class="modal-info">
+      <button class="modal-close" id="modalClose">✕</button>
+      <h3 id="modalTitle"></h3>
+      <p id="modalMeta"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+const socket = io();
+const grid   = document.getElementById('grid');
+
+// ── Stats ───────────────────────────────────────────────────────────────────
+async function refreshStats() {
+  const r = await fetch('/api/stats');
+  const d = await r.json();
+  document.getElementById('statTotal') .textContent = d.total;
+  document.getElementById('statDrowsy').textContent = d.by_type.drowsiness ?? 0;
+  document.getElementById('statCrash') .textContent = d.by_type.crash      ?? 0;
+}
+
+// ── Render card ──────────────────────────────────────────────────────────────
+function makeCard(inc) {
+  const card  = document.createElement('div');
+  card.className = `card ${inc.type}`;
+  card.dataset.inc = JSON.stringify(inc);
+
+  const ts = new Date(inc.timestamp);
+  const formatted = ts.toLocaleString();
+
+  card.innerHTML = `
+    <img src="/incidents/${inc.image}" alt="Incident" loading="lazy"/>
+    <div class="card-body">
+      <span class="card-type">${inc.type}</span>
+      <div class="card-time">🕐 ${formatted}</div>
+      ${inc.metadata ? `<div class="card-meta">📊 ${inc.metadata}</div>` : ''}
+    </div>`;
+
+  card.addEventListener('click', () => openModal(inc));
+  return card;
+}
+
+// ── Modal ────────────────────────────────────────────────────────────────────
+function openModal(inc) {
+  document.getElementById('modalImg').src   = `/incidents/${inc.image}`;
+  document.getElementById('modalTitle').textContent =
+      `${inc.type === 'crash' ? '🚨 Crash SOS' : '⚠️ Drowsiness Alert'}`;
+  document.getElementById('modalMeta').textContent  =
+      `ID: ${inc.id}\nTime: ${new Date(inc.timestamp).toLocaleString()}\nData: ${inc.metadata || 'none'}`;
+  document.getElementById('modal').classList.add('active');
+}
+
+document.getElementById('modalClose').onclick  = () =>
+    document.getElementById('modal').classList.remove('active');
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal'))
+    document.getElementById('modal').classList.remove('active');
+});
+
+// ── Socket.io ────────────────────────────────────────────────────────────────
+socket.on('connect',    () => { document.getElementById('liveStatus').textContent = '● LIVE'; });
+socket.on('disconnect', () => { document.getElementById('liveStatus').textContent = '○ OFFLINE'; });
+
+socket.on('new_incident', inc => {
+  // Remove empty-state placeholder if present
+  const empty = grid.querySelector('.empty');
+  if (empty) empty.remove();
+
+  grid.prepend(makeCard(inc));
+  refreshStats();
+});
+
+// ── Initial load ─────────────────────────────────────────────────────────────
+(async () => {
+  const r = await fetch('/api/incidents?limit=40');
+  const d = await r.json();
+  if (d.incidents.length) {
+    grid.innerHTML = '';
+    d.incidents.forEach(inc => grid.appendChild(makeCard(inc)));
+  }
+  refreshStats();
+})();
+</script>
+</body>
+</html>
