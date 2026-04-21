@@ -1,34 +1,27 @@
-# --- Build Systems ---
+# build outputs
 build/
 edge_device/build/
-cmake-build-debug/
-CMakeFiles/
-CMakeCache.txt
-*.cmake
-Makefile
+cmake-build-*/
 
-# --- Executables & Binaries ---
-*.a
-*.o
-*.so
-*.dylib
-bin/
-Sentinel
-
-# --- Data & Large Files ---
-*.mp4
-*.avi
-*.jpg
-*.png
-data/
-
-# --- IDE Settings (Optional) ---
-.vscode/
-.idea/
-*.swp
-.DS_Store
-
-# --- Tensorflow/Dependencies (Just in case) ---
+# TensorFlow / deps
 tf_build/
-tensorflow/
-third_party/
+tflite_build/
+_deps/
+
+# binaries / archives
+*.a
+*.so
+*.o
+*.bin
+*.zip
+*.tar
+*.tar.gz
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS/editor
+.DS_Store
+*.swp
