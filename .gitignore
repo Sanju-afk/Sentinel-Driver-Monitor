@@ -2,6 +2,7 @@
 build/
 edge_device/build/
 cmake-build-*/
+data/
 
 # TensorFlow / deps
 tf_build/
